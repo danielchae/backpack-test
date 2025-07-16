@@ -3,6 +3,12 @@
 # Claude Code VM Setup Script
 # This script sets up a virtual machine with Claude Code and clones a repository
 # Usage: bash setup_claude_code.sh
+#
+# ⚠️  SECURITY WARNING: This script contains hardcoded authentication credentials!
+# - Do NOT commit this script to public repositories
+# - Do NOT share this script publicly
+# - Set proper file permissions: chmod 600 setup_claude_code.sh
+# - The PAT should have minimal permissions (only 'repo' scope for reading)
 
 set -euo pipefail
 
@@ -14,7 +20,29 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_URL="https://github.com/danielchae/backpack-test"
+# ==========================================
+# PRIVATE REPOSITORY AUTHENTICATION
+# ==========================================
+# To generate a Personal Access Token (PAT):
+# 1. Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
+# 2. Click "Generate new token (classic)"
+# 3. Give it a descriptive name (e.g., "claude-code-vm-setup")
+# 4. Select scope: ✓ repo (Full control of private repositories)
+# 5. Click "Generate token" and copy it immediately
+# 6. Replace 'your_personal_access_token_here' below with your actual token
+
+# Option 1: Hardcode the token (less secure but simpler)
+GITHUB_PAT="your_personal_access_token_here"  # REPLACE THIS WITH YOUR ACTUAL TOKEN
+
+# Option 2: Use environment variable (more secure)
+# Uncomment the line below to use GITHUB_PAT from environment instead
+# GITHUB_PAT="${GITHUB_PAT:-your_personal_access_token_here}"
+
+REPO_OWNER="danielchae"
+REPO_NAME="backpack-test"
+REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}"
+
+# Other configuration
 MIN_NODE_VERSION=18
 CLAUDE_PACKAGE="@anthropic-ai/claude-code"
 
@@ -149,6 +177,27 @@ main() {
     echo "==================================="
     echo
     
+    # Check if this is first run with default token
+    if [ "$GITHUB_PAT" = "your_personal_access_token_here" ]; then
+        echo "⚠️  FIRST TIME SETUP REQUIRED ⚠️"
+        echo
+        echo "This script requires a GitHub Personal Access Token to clone the private repository."
+        echo
+        echo "To generate a token:"
+        echo "1. Visit: https://github.com/settings/tokens/new"
+        echo "2. Give it a name: 'claude-code-vm-setup'"
+        echo "3. Select scope: [✓] repo (Full control of private repositories)"
+        echo "4. Click 'Generate token' and copy it"
+        echo "5. Edit this script and replace 'your_personal_access_token_here' with your token"
+        echo "6. Run this script again"
+        echo
+        echo "Repository to be cloned: ${REPO_OWNER}/${REPO_NAME}"
+        echo
+        exit 1
+    fi
+    
+    echo
+    
     # Detect OS and package manager
     detect_os
     
@@ -201,17 +250,47 @@ main() {
     cd "$WORKSPACE_DIR"
     print_success "Created and entered workspace: $(pwd)"
     
-    # Clone the repository
-    print_status "Cloning repository: $REPO_URL"
-    if git clone "$REPO_URL"; then
-        print_success "Repository cloned successfully"
-    else
-        print_error "Failed to clone repository"
+    # Validate GitHub authentication before proceeding
+    print_status "Validating GitHub authentication..."
+    
+    # Check if PAT is configured
+    if [ "$GITHUB_PAT" = "your_personal_access_token_here" ]; then
+        print_error "GitHub Personal Access Token not configured!"
+        print_error "Please edit this script and replace 'your_personal_access_token_here' with your actual PAT"
+        print_error "See instructions at the top of this script for generating a PAT"
         exit 1
     fi
     
-    # Get repository name from URL
-    REPO_NAME=$(basename "$REPO_URL" .git)
+    # Test authentication by checking if we can access the repository
+    AUTH_URL="https://${GITHUB_PAT}@github.com/${REPO_OWNER}/${REPO_NAME}.git"
+    
+    if git ls-remote "$AUTH_URL" HEAD &>/dev/null; then
+        print_success "GitHub authentication successful"
+    else
+        print_error "GitHub authentication failed!"
+        print_error "Please check:"
+        print_error "  - Your Personal Access Token is valid and not expired"
+        print_error "  - The token has 'repo' scope permissions"
+        print_error "  - The repository exists: ${REPO_OWNER}/${REPO_NAME}"
+        print_error "  - You have access to the repository"
+        exit 1
+    fi
+    
+    # Clone the repository
+    print_status "Cloning private repository: $REPO_URL"
+    
+    # Clone with authentication
+    if git clone "$AUTH_URL" "$REPO_NAME" 2>&1 | grep -v "Cloning into"; then
+        print_success "Repository cloned successfully"
+    else
+        print_error "Failed to clone repository"
+        print_error "This could be due to:"
+        print_error "  - Invalid or expired Personal Access Token"
+        print_error "  - Token lacks 'repo' scope permissions"
+        print_error "  - Repository doesn't exist or you don't have access"
+        print_error "  - Network connectivity issues"
+        exit 1
+    fi
     
     # Change to repository directory
     cd "$REPO_NAME"
