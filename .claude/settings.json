@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [],
+    "deny": [],
+    "additionalDirectories": ["workspace"]
+  },
+  "model": "opus",
+  "enableAllProjectMcpServers": true
+}
